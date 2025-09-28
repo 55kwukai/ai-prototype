@@ -1,0 +1,824 @@
+<!doctype html>
+<html lang="zh">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>模型检测</title>
+        <link
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+            rel="stylesheet"
+        />
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"
+            rel="stylesheet"
+        />
+        <script>
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        colors: {
+                            primary: "#3b82f6", // 蓝色
+                            secondary: "#64748b",
+                            success: { light: "#ecfdf5", dark: "#065f46" },
+                            danger: { light: "#fef2f2", dark: "#991b1b" },
+                            warning: { light: "#fffbeb", dark: "#92400e" },
+                        },
+                        borderRadius: {
+                            none: "0px",
+                            sm: "2px",
+                            DEFAULT: "4px",
+                            md: "8px",
+                            lg: "12px",
+                            xl: "16px",
+                            "2xl": "20px",
+                            "3xl": "24px",
+                            full: "9999px",
+                            button: "4px",
+                        },
+                    },
+                },
+            };
+        </script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+        <style>
+            body {
+                min-height: 1024px;
+                background-color: #f3f4f6;
+            }
+            .upload-area {
+                border: 2px dashed #e5e7eb;
+                transition: all 0.3s;
+            }
+            .upload-area:hover {
+                border-color: #3b82f6;
+            }
+            input[type="number"]::-webkit-inner-spin-button,
+            input[type="number"]::-webkit-outer-spin-button {
+                -webkit-appearance: none;
+                margin: 0;
+            }
+            .custom-scrollbar::-webkit-scrollbar {
+                width: 6px;
+                height: 6px;
+            }
+            .custom-scrollbar::-webkit-scrollbar-thumb {
+                background: #cbd5e1;
+                border-radius: 3px;
+            }
+            .custom-scrollbar::-webkit-scrollbar-track {
+                background: #f1f5f9;
+            }
+            /* 表格内边距统一 */
+            th,
+            td {
+                padding: 12px 16px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="max-w-[1440px] mx-auto px-6 py-8">
+            <!-- 页头：仅显示标题 -->
+            <div class="mb-6 flex justify-between items-center">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900">模型检测</h1>
+                </div>
+            </div>
+
+            <!-- Tab 导航：原有 Tab 加上右侧新增的 “自定义特征” Tab -->
+            <div class="mb-6 border-b border-gray-200">
+                <nav id="tabs" class="flex space-x-8" aria-label="Tabs">
+                    <button
+                        data-tab-target="tab-content-history-config"
+                        class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
+                    >
+                        测试用例管理
+                    </button>
+                    <button
+                        data-tab-target="tab-content-detect"
+                        class="tab-button border-primary text-primary whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
+                        aria-current="page"
+                    >
+                        检测
+                    </button>
+                    <button
+                        data-tab-target="tab-content-history-detect"
+                        class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
+                    >
+                        检测历史
+                    </button>
+                    <button
+                        data-tab-target="tab-content-custom-feature"
+                        class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
+                    >
+                        自定义特征
+                    </button>
+                </nav>
+            </div>
+
+            <div id="tab-content">
+                <!-- 测试用例管理 Tab -->
+                <div id="tab-content-history-config" class="tab-pane hidden">
+                    <div class="flex justify-end gap-3 p-4">
+                        <button
+                            onclick="openModelLibrary()"
+                            class="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 shadow-sm text-sm font-medium"
+                        >
+                            <i class="fas fa-download mr-2"></i>导出测试用例
+                        </button>
+                        <button
+                            onclick="openConfigModal()"
+                            class="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 shadow-sm text-sm font-medium"
+                        >
+                            <i class="fas fa-upload mr-2"></i>导入测试用例
+                        </button>
+                    </div>
+                    <div class="bg-white rounded-lg shadow-sm overflow-hidden">
+                        <table
+                            class="w-full text-left text-sm border-collapse divide-y divide-gray-200"
+                        >
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="text-gray-700 font-medium">
+                                        模型
+                                    </th>
+                                    <th class="text-gray-700 font-medium">
+                                        操作
+                                    </th>
+                                    <th class="text-gray-700 font-medium">
+                                        操作时间
+                                    </th>
+                                    <th class="text-gray-700 font-medium">
+                                        操作人
+                                    </th>
+                                    <th class="text-gray-700 font-medium">
+                                        状态
+                                    </th>
+                                    <th class="text-gray-700 font-medium">
+                                        文件
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody
+                                class="divide-y divide-gray-200 text-gray-600"
+                            >
+                                <tr>
+                                    <td>xx等25个模型</td>
+                                    <td>导出</td>
+                                    <td>2025-04-01 11:40:51</td>
+                                    <td>user****@example.com</td>
+                                    <td>
+                                        <span
+                                            class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-success-light text-success-dark"
+                                        >
+                                            成功
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <a
+                                            href="javascript:void(0)"
+                                            onclick="downloadExcel('xx')"
+                                            class="text-blue-500 hover:underline"
+                                            >下载</a
+                                        >
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>xx等30个模型</td>
+                                    <td>导入</td>
+                                    <td>2025-03-30 09:15:22</td>
+                                    <td>user****@example.com</td>
+                                    <td>
+                                        <span
+                                            class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-success-light text-success-dark"
+                                        >
+                                            成功
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <a
+                                            href="javascript:void(0)"
+                                            onclick="downloadExcel('xx')"
+                                            class="text-blue-500 hover:underline"
+                                            >下载</a
+                                        >
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>xx等20个模型</td>
+                                    <td>导入</td>
+                                    <td>2025-03-28 14:05:00</td>
+                                    <td>user****@example.com</td>
+                                    <td>
+                                        <span
+                                            class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-danger-light text-danger-dark"
+                                        >
+                                            失败
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <a
+                                            href="javascript:void(0)"
+                                            onclick="downloadExcel('xx')"
+                                            class="text-blue-500 hover:underline"
+                                            >下载</a
+                                        >
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>xx等15个模型</td>
+                                    <td>导入</td>
+                                    <td>2025-03-25 16:30:10</td>
+                                    <td>user****@example.com</td>
+                                    <td>
+                                        <span
+                                            class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-warning-light text-warning-dark"
+                                        >
+                                            校验不通过
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <a
+                                            href="javascript:void(0)"
+                                            onclick="downloadExcel('xx')"
+                                            class="text-blue-500 hover:underline"
+                                            >下载</a
+                                        >
+                                        <a
+                                            href="javascript:void(0)"
+                                            onclick="downloadFailedExcel('xx')"
+                                            class="ml-2 text-blue-500 hover:underline"
+                                            >失败原因</a
+                                        >
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>xx等40个模型</td>
+                                    <td>导出</td>
+                                    <td>2025-03-22 10:00:00</td>
+                                    <td>user****@example.com</td>
+                                    <td>
+                                        <span
+                                            class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-success-light text-success-dark"
+                                        >
+                                            成功
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <a
+                                            href="javascript:void(0)"
+                                            onclick="downloadExcel('xx')"
+                                            class="text-blue-500 hover:underline"
+                                            >下载</a
+                                        >
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-4 flex justify-end">
+                        <span class="text-sm text-gray-500"
+                            >显示 1-5 条，共 5 条记录</span
+                        >
+                    </div>
+                </div>
+
+                <!-- 检测 Tab -->
+                <div id="tab-content-detect" class="tab-pane">
+                    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+                        <!-- 模型选择区域 -->
+                        <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                            模型选择
+                        </h2>
+                        <div
+                            class="flex items-center justify-between p-4 border border-gray-200 rounded-lg mb-4"
+                        >
+                            <div class="flex items-center gap-4">
+                                <i
+                                    class="fas fa-cube text-gray-400 text-xl"
+                                ></i>
+                                <div>
+                                    <p
+                                        class="text-sm font-medium text-gray-900"
+                                    >
+                                        未选择任何模型
+                                    </p>
+                                    <p class="text-xs text-gray-500">
+                                        从模型库中选择需要检测的模型
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onclick="openModelLibrary()"
+                                class="px-4 py-2 text-primary hover:bg-blue-50 rounded text-sm font-medium"
+                            >
+                                <i class="fas fa-plus mr-2"></i>从模型库选择
+                            </button>
+                        </div>
+                        <!-- 选择检测特征区域 -->
+                        <div class="mt-8">
+                            <div class="flex justify-between items-center mb-4">
+                                <h2 class="text-lg font-semibold text-gray-900">
+                                    选择检测特征
+                                </h2>
+                                <label class="inline-flex items-center">
+                                    <input
+                                        type="checkbox"
+                                        id="selectAllFeatures"
+                                        class="form-checkbox h-4 w-4 text-primary"
+                                    />
+                                    <span class="ml-2 text-sm text-gray-700"
+                                        >全选</span
+                                    >
+                                </label>
+                            </div>
+                            <!-- 通用特征 -->
+                            <div class="mb-4">
+                                <h3
+                                    class="text-md font-medium text-gray-800 mb-2"
+                                >
+                                    通用特征
+                                </h3>
+                                <div
+                                    id="commonFeatureGrid"
+                                    class="grid grid-cols-3 gap-4"
+                                >
+                                    <label
+                                        class="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg hover:border-primary cursor-pointer transition duration-150 ease-in-out"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                                        />
+                                        <span class="text-sm text-gray-700"
+                                            >材质被删除</span
+                                        >
+                                    </label>
+                                    <label
+                                        class="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg hover:border-primary cursor-pointer transition duration-150 ease-in-out"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                                        />
+                                        <span class="text-sm text-gray-700"
+                                            >部件尺寸超限</span
+                                        >
+                                    </label>
+                                    <label
+                                        class="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg hover:border-primary cursor-pointer transition duration-150 ease-in-out"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                                        />
+                                        <span class="text-sm text-gray-700"
+                                            >部件使用了抑制</span
+                                        >
+                                    </label>
+                                    <label
+                                        class="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg hover:border-primary cursor-pointer transition duration-150 ease-in-out"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                                        />
+                                        <span class="text-sm text-gray-700"
+                                            >部件使用了隐藏</span
+                                        >
+                                    </label>
+                                    <label
+                                        class="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg hover:border-primary cursor-pointer transition duration-150 ease-in-out"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                                        />
+                                        <span class="text-sm text-gray-700"
+                                            >部件被删除</span
+                                        >
+                                    </label>
+                                </div>
+                            </div>
+                            <!-- 自定义特征 -->
+                            <div class="mb-4">
+                                <h3
+                                    class="text-md font-medium text-gray-800 mb-2"
+                                >
+                                    自定义特征
+                                </h3>
+                                <div
+                                    id="customFeatureGrid"
+                                    class="grid grid-cols-3 gap-4"
+                                >
+                                    <label
+                                        class="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg hover:border-primary cursor-pointer transition duration-150 ease-in-out relative group"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                                        />
+                                        <span
+                                            class="text-sm text-gray-700 flex-1 mr-6"
+                                            >自定义特征示例</span
+                                        >
+                                        <button
+                                            type="button"
+                                            class="removeCustomFeatureButton absolute right-2 top-1/2 transform -translate-y-1/2 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            title="移除特征"
+                                        >
+                                            <i
+                                                class="fas fa-trash-alt fa-xs"
+                                            ></i>
+                                        </button>
+                                    </label>
+                                </div>
+                            </div>
+                            <!-- 添加自定义特征链接（无填充，仅文字下划线） -->
+                            <div class="mb-6">
+                                <a
+                                    href="https://beta.kujiale.com/v/account/login?redir=%2Fvc%2Feditor%2Fglobalvariable%3Ftooltype%3Dwardrobe%26currentTab%3Dcustom-search%26__appv%3Dyuanque_beta"
+                                    target="_blank"
+                                    class="text-blue-500 underline"
+                                >
+                                    <i class="fas fa-plus mr-2"></i
+                                    >添加自定义特征
+                                </a>
+                            </div>
+                            <!-- 开始检测按钮，点击后弹出检测模式选择模态框 -->
+                            <div
+                                class="flex justify-end pt-4 border-t border-gray-200"
+                            >
+                                <button
+                                    id="startDetectionButton"
+                                    class="px-6 py-3 bg-primary text-white rounded hover:bg-blue-600 shadow-sm font-medium"
+                                >
+                                    开始检测
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 检测历史 Tab -->
+                <div id="tab-content-history-detect" class="tab-pane hidden">
+                    <div class="bg-white rounded-lg shadow-sm p-6">
+                        <h2 class="text-lg font-semibold text-gray-900">
+                            检测历史
+                        </h2>
+                        <table
+                            class="w-full text-left text-sm border-collapse mt-4"
+                        >
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-2">检测时间</th>
+                                    <th class="px-4 py-2">任务Id</th>
+                                    <th class="px-4 py-2">状态</th>
+                                    <th class="px-4 py-2">操作人</th>
+                                    <th class="px-4 py-2">检测结果</th>
+                                    <th class="px-4 py-2">备注</th>
+                                </tr>
+                            </thead>
+                            <tbody
+                                id="detectionHistoryBody"
+                                class="divide-y divide-gray-200"
+                            >
+                                <tr>
+                                    <td class="px-4 py-2">
+                                        2025-04-01 12:00:00
+                                    </td>
+                                    <td class="px-4 py-2">TASK123456</td>
+                                    <td class="px-4 py-2">
+                                        <span
+                                            class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-success-light text-success-dark"
+                                        >
+                                            成功
+                                        </span>
+                                    </td>
+                                    <td class="px-4 py-2">
+                                        user****@example.com
+                                    </td>
+                                    <td class="px-4 py-2">
+                                        <a
+                                            href="javascript:void(0)"
+                                            onclick="downloadSummary('TASK123456')"
+                                            class="text-blue-500 hover:underline"
+                                            >下载</a
+                                        >
+                                    </td>
+                                    <td class="px-4 py-2">—</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-2">
+                                        2025-04-01 11:30:00
+                                    </td>
+                                    <td class="px-4 py-2">TASK654321</td>
+                                    <td class="px-4 py-2">
+                                        <span
+                                            class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-danger-light text-danger-dark"
+                                        >
+                                            失败
+                                        </span>
+                                    </td>
+                                    <td class="px-4 py-2">
+                                        user****@example.com
+                                    </td>
+                                    <td class="px-4 py-2">-</td>
+                                    <td class="px-4 py-2">脚本故障</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 自定义特征 Tab -->
+                <div id="tab-content-custom-feature" class="tab-pane hidden">
+                    <div class="bg-white rounded-lg shadow-sm p-6">
+                        <h2 class="text-lg font-semibold text-gray-900">
+                            自定义特征
+                        </h2>
+                        <p class="mt-4 text-gray-700">
+                            这里展示并管理用户自定义的特征内容，可对自定义特征进行编辑和维护。
+                        </p>
+                        <!-- 如有需求，可继续添加相关操作 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 模态框：模型库 -->
+        <div
+            id="modelLibrary"
+            class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50"
+        >
+            <div class="bg-white p-6 rounded-lg shadow-lg w-96 m-auto mt-20">
+                <h3 class="text-lg font-semibold mb-4">模型库</h3>
+                <p class="mb-4">这里展示模型库内容...</p>
+                <div class="flex justify-end">
+                    <button
+                        onclick="closeModelLibrary()"
+                        class="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+                    >
+                        关闭
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 模态框：参数配置（Excel上传） -->
+        <div
+            id="configModal"
+            class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50"
+        >
+            <div class="bg-white p-6 rounded-lg shadow-lg w-96">
+                <h3 class="text-lg font-semibold mb-4">导入测试用例</h3>
+                <input type="file" accept=".xlsx, .xls" class="mb-4 w-full" />
+                <div class="flex justify-end space-x-2">
+                    <button
+                        onclick="closeConfigModal()"
+                        class="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+                    >
+                        取消
+                    </button>
+                    <button
+                        onclick="importTestCases()"
+                        class="px-4 py-2 bg-primary text-white rounded hover:bg-blue-600"
+                    >
+                        导入
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 模态框：检测模式选择（单选交互） -->
+        <div
+            id="detectionModeModal"
+            class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50"
+        >
+            <div class="bg-white p-6 rounded-lg shadow-lg w-80">
+                <h3 class="text-lg font-semibold mb-4">选择检测模式</h3>
+                <form id="detectionModeForm">
+                    <div class="mb-4">
+                        <label class="flex items-center">
+                            <input
+                                type="radio"
+                                name="detectionMode"
+                                value="检测当前值"
+                                class="form-radio h-4 w-4 text-primary"
+                                checked
+                            />
+                            <span class="ml-2 text-gray-700">检测当前值</span>
+                        </label>
+                    </div>
+                    <div class="mb-4">
+                        <label class="flex items-center">
+                            <input
+                                type="radio"
+                                name="detectionMode"
+                                value="检测所有测试用例"
+                                class="form-radio h-4 w-4 text-primary"
+                            />
+                            <span class="ml-2 text-gray-700"
+                                >检测所有测试用例</span
+                            >
+                        </label>
+                    </div>
+                    <div class="flex justify-end space-x-4">
+                        <button
+                            type="button"
+                            id="confirmDetectionModeBtn"
+                            class="px-4 py-2 bg-primary text-white rounded hover:bg-blue-600"
+                        >
+                            确认
+                        </button>
+                        <button
+                            type="button"
+                            id="cancelDetectionModeBtn"
+                            class="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
+                        >
+                            取消
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <script>
+            // 模态框相关函数
+            function openModelLibrary() {
+                document
+                    .getElementById("modelLibrary")
+                    .classList.remove("hidden");
+            }
+            function closeModelLibrary() {
+                document.getElementById("modelLibrary").classList.add("hidden");
+            }
+            function openConfigModal() {
+                document
+                    .getElementById("configModal")
+                    .classList.remove("hidden");
+            }
+            function closeConfigModal() {
+                document.getElementById("configModal").classList.add("hidden");
+            }
+            function importTestCases() {
+                alert("测试用例导入成功");
+                closeConfigModal();
+            }
+
+            // Tab 切换逻辑
+            const tabsContainer = document.getElementById("tabs");
+            const tabContentContainer = document.getElementById("tab-content");
+            if (tabsContainer && tabContentContainer) {
+                tabsContainer.addEventListener("click", (e) => {
+                    const clickedTab = e.target.closest(".tab-button");
+                    if (!clickedTab) return;
+                    const targetPaneId =
+                        clickedTab.getAttribute("data-tab-target");
+                    const targetPane = document.getElementById(targetPaneId);
+                    tabsContainer
+                        .querySelectorAll(".tab-button")
+                        .forEach((btn) => {
+                            btn.classList.remove(
+                                "border-primary",
+                                "text-primary",
+                            );
+                            btn.classList.add(
+                                "border-transparent",
+                                "text-gray-500",
+                                "hover:text-gray-700",
+                                "hover:border-gray-300",
+                            );
+                            btn.removeAttribute("aria-current");
+                        });
+                    clickedTab.classList.remove(
+                        "border-transparent",
+                        "text-gray-500",
+                        "hover:text-gray-700",
+                        "hover:border-gray-300",
+                    );
+                    clickedTab.classList.add("border-primary", "text-primary");
+                    clickedTab.setAttribute("aria-current", "page");
+                    tabContentContainer
+                        .querySelectorAll(".tab-pane")
+                        .forEach((pane) => {
+                            pane.classList.add("hidden");
+                        });
+                    if (targetPane) {
+                        targetPane.classList.remove("hidden");
+                    }
+                });
+            }
+
+            // 检测模式选择模态框逻辑（采用单选交互）
+            const startDetectionButton = document.getElementById(
+                "startDetectionButton",
+            );
+            const detectionModeModal =
+                document.getElementById("detectionModeModal");
+            const confirmDetectionModeBtn = document.getElementById(
+                "confirmDetectionModeBtn",
+            );
+            const cancelDetectionModeBtn = document.getElementById(
+                "cancelDetectionModeBtn",
+            );
+            if (startDetectionButton) {
+                startDetectionButton.addEventListener("click", () => {
+                    detectionModeModal.classList.remove("hidden");
+                });
+            }
+            if (cancelDetectionModeBtn) {
+                cancelDetectionModeBtn.addEventListener("click", () => {
+                    detectionModeModal.classList.add("hidden");
+                });
+            }
+            confirmDetectionModeBtn.addEventListener("click", () => {
+                const selectedMode = document.querySelector(
+                    'input[name="detectionMode"]:checked',
+                ).value;
+                if (confirm("是否确认开始检测?")) {
+                    // 在确认后，新增一条“执行中”的检测记录到检测历史表
+                    const tbody = document.getElementById(
+                        "detectionHistoryBody",
+                    );
+                    const newRow = document.createElement("tr");
+                    const currentTime = new Date().toLocaleString();
+                    const randomTaskId =
+                        "TASK" + Math.floor(Math.random() * 100000);
+                    newRow.innerHTML = `
+            <td class="px-4 py-2">${currentTime}</td>
+            <td class="px-4 py-2">${randomTaskId}</td>
+            <td class="px-4 py-2">
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-warning-light text-warning-dark">
+                执行中
+              </span>
+            </td>
+            <td class="px-4 py-2">user****@example.com</td>
+            <td class="px-4 py-2">-</td>
+            <td class="px-4 py-2">
+              <a href="javascript:void(0)" onclick="alert('详情待定')" class="text-blue-500 hover:underline">备注</a>
+            </td>`;
+                    tbody.appendChild(newRow);
+                    detectionModeModal.classList.add("hidden");
+                    console.log("检测模式选择: " + selectedMode);
+                    // 切换到检测历史 Tab
+                    const historyDetectTabButton = document.querySelector(
+                        '[data-tab-target="tab-content-history-detect"]',
+                    );
+                    if (historyDetectTabButton) {
+                        historyDetectTabButton.click();
+                    }
+                } else {
+                    detectionModeModal.classList.add("hidden");
+                    console.log("检测模式取消");
+                }
+            });
+
+            // 全选功能
+            const selectAllCheckbox =
+                document.getElementById("selectAllFeatures");
+            if (selectAllCheckbox) {
+                selectAllCheckbox.addEventListener("change", function () {
+                    const allFeatureCheckboxes = document.querySelectorAll(
+                        "#commonFeatureGrid input[type='checkbox'], #customFeatureGrid input[type='checkbox']",
+                    );
+                    allFeatureCheckboxes.forEach((cb) => {
+                        cb.checked = selectAllCheckbox.checked;
+                    });
+                });
+            }
+
+            // 删除自定义特征
+            const customFeatureGrid =
+                document.getElementById("customFeatureGrid");
+            if (customFeatureGrid) {
+                customFeatureGrid.addEventListener("click", function (e) {
+                    const removeBtn = e.target.closest(
+                        ".removeCustomFeatureButton",
+                    );
+                    if (removeBtn) {
+                        removeBtn.closest("label").remove();
+                    }
+                });
+            }
+
+            // 测试用例管理下载 Excel 表逻辑
+            function downloadExcel(modelId) {
+                alert("下载 Excel 表，模型Id：" + modelId);
+            }
+            function downloadFailedExcel(modelId) {
+                alert("下载失败表格，模型Id：" + modelId);
+            }
+            // 检测历史相关功能
+            function downloadSummary(taskId) {
+                alert("自动下载汇总表，任务Id：" + taskId);
+            }
+            function downloadDetail(taskId) {
+                alert("自动下载详情表，任务Id：" + taskId);
+            }
+            function showFailureReason(reason) {
+                alert(reason);
+            }
+        </script>
+    </body>
+</html>

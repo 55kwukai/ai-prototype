@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="zh">
+    <head>
+        <meta charset="UTF-8" />
+        <title>模型特征检测</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap"
+            rel="stylesheet"
+        />
+        <link
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+            rel="stylesheet"
+        />
+        <!-- Tailwind -->
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script>
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        colors: {
+                            primary: "#4F46E5",
+                            secondary: "#6B7280",
+                        },
+                        borderRadius: {
+                            none: "0px",
+                            sm: "2px",
+                            DEFAULT: "4px",
+                            md: "8px",
+                            lg: "12px",
+                            xl: "16px",
+                            "2xl": "20px",
+                            "3xl": "24px",
+                            full: "9999px",
+                            button: "4px",
+                        },
+                    },
+                },
+            };
+        </script>
+        <!-- CodeMirror 样式 -->
+        <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css"
+        />
+        <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css"
+        />
+        <style>
+            @keyframes fadeIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(20px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            .fade-in {
+                animation: fadeIn 0.6s ease-out forwards;
+            }
+            /* 针对 CodeMirror 编辑器的外层容器 */
+            .CodeMirror {
+                height: 100%;
+                border-radius: 0.5rem;
+            }
+        </style>
+    </head>
+    <body class="min-h-[1024px] bg-gray-50">
+        <div class="max-w-[1440px] mx-auto px-8 py-12 fade-in">
+            <header class="mb-12">
+                <h1 class="text-3xl font-bold text-gray-900 mb-4">
+                    模型特征检测
+                </h1>
+                <p class="text-gray-600">
+                    通过输入模型参数组合与目标特征脚本，检测模型是否具备特定特征。支持多组参数和多个特征的同时检测。
+                </p>
+            </header>
+
+            <main>
+                <div class="grid grid-cols-2 gap-8 mb-8">
+                    <!-- 参数组合脚本 -->
+                    <div
+                        class="bg-white rounded-lg shadow-sm p-6 transform transition-transform duration-200 hover:scale-105"
+                    >
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-semibold text-gray-900">
+                                参数组合脚本
+                            </h2>
+                            <div class="space-x-2">
+                                <button
+                                    class="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-button hover:bg-gray-200 whitespace-nowrap transition-transform duration-200 hover:scale-105"
+                                >
+                                    <i class="fas fa-plus mr-2"></i>添加组合
+                                </button>
+                                <button
+                                    class="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-button hover:bg-gray-200 whitespace-nowrap transition-transform duration-200 hover:scale-105"
+                                >
+                                    <i class="fas fa-trash-alt mr-2"></i>清空
+                                </button>
+                            </div>
+                        </div>
+                        <div class="bg-gray-900 rounded-lg p-4 h-[400px]">
+                            <!-- 用 textarea 承载初始代码，后续将由 CodeMirror 初始化 -->
+                            <textarea id="editor1" name="editor1">
+def check_params():
+    params = {
+        'learning_rate': 0.001,
+        'batch_size': 32,
+        'epochs': 100
+    }
+    return params
+            </textarea
+                            >
+                        </div>
+                    </div>
+
+                    <!-- 目标特征脚本 -->
+                    <div
+                        class="bg-white rounded-lg shadow-sm p-6 transform transition-transform duration-200 hover:scale-105"
+                    >
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-semibold text-gray-900">
+                                目标特征脚本
+                            </h2>
+                            <div class="space-x-2">
+                                <button
+                                    class="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-button hover:bg-gray-200 whitespace-nowrap transition-transform duration-200 hover:scale-105"
+                                >
+                                    <i class="fas fa-plus mr-2"></i>添加特征
+                                </button>
+                                <button
+                                    class="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-button hover:bg-gray-200 whitespace-nowrap transition-transform duration-200 hover:scale-105"
+                                >
+                                    <i class="fas fa-trash-alt mr-2"></i>清空
+                                </button>
+                            </div>
+                        </div>
+                        <div class="bg-gray-900 rounded-lg p-4 h-[400px]">
+                            <!-- 用 textarea 承载初始代码，后续将由 CodeMirror 初始化 -->
+                            <textarea id="editor2" name="editor2">
+def check_feature(model):
+    accuracy = model.evaluate()
+    return accuracy > 0.95
+            </textarea
+                            >
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-center space-x-4 mb-12">
+                    <button
+                        class="px-6 py-3 bg-primary text-white font-medium rounded-button hover:bg-primary/90 whitespace-nowrap transition-transform duration-200 hover:scale-105"
+                    >
+                        <i class="fas fa-play mr-2"></i>开始检测
+                    </button>
+                    <button
+                        class="px-6 py-3 text-gray-700 bg-gray-100 font-medium rounded-button hover:bg-gray-200 whitespace-nowrap transition-transform duration-200 hover:scale-105"
+                    >
+                        <i class="fas fa-redo mr-2"></i>重置
+                    </button>
+                </div>
+
+                <div
+                    class="bg-white rounded-lg shadow-sm p-6 transform transition-transform duration-200 hover:scale-105"
+                >
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-semibold text-gray-900">
+                            检测结果
+                        </h2>
+                        <button
+                            class="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-button hover:bg-gray-200 whitespace-nowrap transition-transform duration-200 hover:scale-105"
+                        >
+                            <i class="fas fa-download mr-2"></i>导出结果
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th
+                                        class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                                    >
+                                        参数组合
+                                    </th>
+                                    <th
+                                        class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                                    >
+                                        特征检测结果
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                <tr>
+                                    <td
+                                        class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+                                    >
+                                        参数组合 1
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span
+                                            class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800"
+                                        >
+                                            <i class="fas fa-check mr-2"></i
+                                            >通过
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td
+                                        class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+                                    >
+                                        参数组合 2
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span
+                                            class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800"
+                                        >
+                                            <i class="fas fa-times mr-2"></i
+                                            >未通过
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td
+                                        class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+                                    >
+                                        参数组合 3
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span
+                                            class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800"
+                                        >
+                                            <i class="fas fa-check mr-2"></i
+                                            >通过
+                                        </span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- CodeMirror 脚本 -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/python/python.min.js"></script>
+        <script>
+            document.addEventListener("DOMContentLoaded", function () {
+                // 初始化参数组合脚本编辑器
+                var editor1 = CodeMirror.fromTextArea(
+                    document.getElementById("editor1"),
+                    {
+                        mode: "python",
+                        lineNumbers: true,
+                        theme: "dracula",
+                        tabSize: 4,
+                        indentUnit: 4,
+                    },
+                );
+                // 调整编辑器高度以适应容器
+                editor1.setSize("100%", "100%");
+
+                // 初始化目标特征脚本编辑器
+                var editor2 = CodeMirror.fromTextArea(
+                    document.getElementById("editor2"),
+                    {
+                        mode: "python",
+                        lineNumbers: true,
+                        theme: "dracula",
+                        tabSize: 4,
+                        indentUnit: 4,
+                    },
+                );
+                editor2.setSize("100%", "100%");
+            });
+        </script>
+    </body>
+</html>

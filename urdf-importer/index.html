@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URDF 导入工具</title>
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --primary-hover: #0056b3;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --warning-color: #d97706; /* Amber-600 */
+            --info-color: #17a2b8;
+            --light-gray: #f8f9fa;
+            --medium-gray: #e9ecef;
+            --font-color: #212529;
+            --border-color: #dee2e6;
+            --background-color: #fff;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --border-radius: 0.3rem;
+            --box-shadow: 0 8px 24px rgba(0,0,0,.12);
+        }
+
+        body {
+            font-family: var(--font-family);
+            background-color: #e9ecef;
+            color: var(--font-color);
+            margin: 0;
+            padding: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+
+        .button {
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 0.6rem 1.2rem; font-size: 1rem; font-weight: 500;
+            border-radius: var(--border-radius); border: 1px solid transparent;
+            cursor: pointer; transition: all 0.2s ease-in-out;
+        }
+        .button-primary { background-color: var(--primary-color); color: white; border-color: var(--primary-color); }
+        .button-primary:hover { background-color: var(--primary-hover); }
+        .button-primary:disabled { background-color: #a0c7ff; border-color: #a0c7ff; cursor: not-allowed; }
+
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.4);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .modal-overlay.visible {
+            display: flex;
+            opacity: 1;
+        }
+
+        .modal-container {
+            background-color: var(--background-color);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            width: 90%;
+            max-width: 800px;
+            display: flex;
+            flex-direction: column;
+            max-height: 85vh;
+            transform: scale(0.95);
+            transition: transform 0.3s ease;
+        }
+        .modal-overlay.visible .modal-container {
+            transform: scale(1);
+        }
+
+        .modal-header {
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            flex-shrink: 0;
+        }
+        .modal-title { font-size: 1.25rem; font-weight: 600; margin: 0; }
+        .modal-close { background: none; border: none; font-size: 1.8rem; cursor: pointer; color: #6c757d; padding: 0; line-height: 1; }
+        .modal-close:hover { color: var(--font-color); }
+
+        .modal-body {
+            padding: 24px;
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+
+        .upload-controls {
+            display: flex;
+            gap: 16px;
+            align-items: flex-end;
+            margin-bottom: 24px;
+        }
+        .form-group { flex-grow: 1; }
+        .form-group label { display: block; font-size: 0.9rem; font-weight: 500; margin-bottom: 8px; }
+        .form-group select {
+            width: 100%;
+            padding: 0.5rem 0.75rem;
+            font-size: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            background-color: var(--background-color);
+        }
+        .upload-controls .button { white-space: nowrap; }
+
+        .task-table-container {
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            overflow: hidden;
+        }
+        .task-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        .task-table th, .task-table td {
+            padding: 12px 16px;
+            text-align: left;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+        .task-table th.col-filename, .task-table td.col-filename {
+            white-space: normal;
+            word-break: break-all;
+        }
+        .task-table thead {
+            background-color: var(--light-gray);
+            border-bottom: 1px solid var(--border-color);
+        }
+        .task-table th { font-weight: 500; color: #495057; }
+        .task-table tbody tr:not(:last-child) { border-bottom: 1px solid var(--border-color); }
+
+        .status-badge {
+            padding: 0.2em 0.6em;
+            border-radius: 10rem;
+            font-size: 0.8em;
+            font-weight: 600;
+            color: white;
+        }
+        .status-queued { background-color: #6c757d; }
+        .status-processing { background-color: var(--info-color); }
+        .status-success { background-color: var(--success-color); }
+        .status-failed { background-color: var(--danger-color); }
+
+        .action-link {
+            color: var(--primary-color);
+            text-decoration: none;
+            cursor: pointer;
+            font-weight: 500;
+            margin: 0 6px;
+        }
+        .action-link:hover { text-decoration: underline; }
+        .action-link.danger { color: var(--danger-color); }
+        
+        #concurrency-warning {
+            font-size: 0.85rem;
+            color: var(--warning-color);
+            margin-top: 8px;
+            display: none;
+        }
+
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+    <button class="button button-primary" id="open-modal-btn"><i class="fas fa-upload" style="margin-right: 8px;"></i>导入 URDF</button>
+
+    <div id="import-modal" class="modal-overlay">
+        <div class="modal-container">
+            <header class="modal-header">
+                <h3 class="modal-title">导入 URDF 模型</h3>
+                <button id="close-modal-btn" class="modal-close">&times;</button>
+            </header>
+            <main class="modal-body">
+                <div class="upload-controls">
+                    <div class="form-group">
+                        <label for="library-select">库</label>
+                        <select id="library-select"></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="folder-select">文件夹</label>
+                        <select id="folder-select"></select>
+                    </div>
+                    <button class="button button-primary" id="upload-btn" title="支持 .zip 和 .tar.gz 格式的压缩包">
+                        <i class="fas fa-plus" style="margin-right: 8px;"></i>上传文件
+                    </button>
+                    <input type="file" id="file-input" accept=".zip,.tar.gz" multiple style="display: none;">
+                </div>
+                <div id="concurrency-warning">已达到最大并发数 (3)，新任务将自动排队。</div>
+
+                <div class="task-table-container">
+                    <table class="task-table">
+                        <thead>
+                            <tr>
+                                <th class="col-filename" style="width: 40%;">源文件</th>
+                                <th style="width: 25%;">模型</th>
+                                <th style="width: 15%;">状态</th>
+                                <th style="width: 20%;">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="task-list">
+                            <!-- Task rows will be injected here -->
+                        </tbody>
+                    </table>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+    const URDFImporter = (() => {
+        // --- Configuration ---
+        const MAX_CONCURRENT_UPLOADS = 3;
+        const libraryData = {
+            "主商品库": ["默认文件夹", "机械臂系列", "测试模型"],
+            "个人库": ["我的收藏", "进行中项目"],
+            "企业库": ["共享资源", "2025年项目"]
+        };
+
+        // --- State ---
+        let tasks = []; // { id, file, savePath, status, progress, message }
+        let activeUploads = 0;
+
+        // --- DOM Elements ---
+        const DOM = {
+            openModalBtn: document.getElementById('open-modal-btn'),
+            modal: document.getElementById('import-modal'),
+            closeModalBtn: document.getElementById('close-modal-btn'),
+            uploadBtn: document.getElementById('upload-btn'),
+            fileInput: document.getElementById('file-input'),
+            librarySelect: document.getElementById('library-select'),
+            folderSelect: document.getElementById('folder-select'),
+            taskList: document.getElementById('task-list'),
+            concurrencyWarning: document.getElementById('concurrency-warning'),
+        };
+
+        // --- Initialization ---
+        const init = () => {
+            DOM.openModalBtn.addEventListener('click', openModal);
+            DOM.closeModalBtn.addEventListener('click', closeModal);
+            DOM.uploadBtn.addEventListener('click', () => DOM.fileInput.click());
+            DOM.fileInput.addEventListener('change', handleFileSelection);
+            DOM.taskList.addEventListener('click', handleTaskAction);
+            DOM.librarySelect.addEventListener('change', populateFolderOptions);
+
+            populateLibraryOptions();
+        };
+
+        // --- UI Population ---
+        const populateLibraryOptions = () => {
+            DOM.librarySelect.innerHTML = Object.keys(libraryData).map(lib => `<option value="${lib}">${lib}</option>`).join('');
+            populateFolderOptions();
+        };
+
+        const populateFolderOptions = () => {
+            const selectedLibrary = DOM.librarySelect.value;
+            const folders = libraryData[selectedLibrary] || [];
+            DOM.folderSelect.innerHTML = folders.map(folder => `<option value="${folder}">${folder}</option>`).join('');
+        };
+
+        // --- Modal Management ---
+        const openModal = () => DOM.modal.classList.add('visible');
+        const closeModal = () => DOM.modal.classList.remove('visible');
+
+        // --- File & Task Handling ---
+        const handleFileSelection = (e) => {
+            const files = e.target.files;
+            if (!files.length) return;
+
+            const savePath = { library: DOM.librarySelect.value, folder: DOM.folderSelect.value };
+            for (const file of files) {
+                const fileNameLower = file.name.toLowerCase();
+                if (fileNameLower.endsWith('.zip') || fileNameLower.endsWith('.tar.gz')) {
+                    addTask(file, savePath);
+                } else {
+                    alert(`文件 "${file.name}" 不是 .zip 或 .tar.gz 格式, 已忽略。`);
+                }
+            }
+            
+            DOM.fileInput.value = '';
+            processQueue();
+        };
+
+        const addTask = (file, savePath) => {
+            const task = {
+                id: `task-${Date.now()}-${Math.random()}`,
+                file: file,
+                savePath: savePath,
+                status: 'queued',
+                progress: 0,
+                message: '排队中'
+            };
+            tasks.push(task);
+            render();
+        };
+        
+        const processQueue = () => {
+            tasks.forEach(task => {
+                if (task.status === 'queued' && activeUploads < MAX_CONCURRENT_UPLOADS) {
+                    startTask(task);
+                }
+            });
+            updateUploadAbility();
+        };
+
+        const startTask = (task) => {
+            activeUploads++;
+            task.status = 'processing';
+            task.message = '准备上传...';
+            render();
+            
+            simulateProcess(task).finally(() => {
+                activeUploads--;
+                processQueue();
+            });
+        };
+        
+        const handleTaskAction = (e) => {
+            const target = e.target.closest('[data-action]');
+            if (!target) return;
+
+            const action = target.dataset.action;
+            const taskId = target.dataset.id;
+            const taskIndex = tasks.findIndex(t => t.id === taskId);
+            if (taskIndex === -1) return;
+
+            switch (action) {
+                case 'retry':
+                    tasks[taskIndex].status = 'queued';
+                    tasks[taskIndex].progress = 0;
+                    tasks[taskIndex].message = '排队中';
+                    break;
+                case 'cancel':
+                    if (tasks[taskIndex].status === 'processing') {
+                        // Mark for cancellation, let simulation handle it
+                        tasks[taskIndex].status = 'cancelled'; 
+                    }
+                    tasks.splice(taskIndex, 1);
+                    break;
+                case 'remove':
+                    tasks.splice(taskIndex, 1);
+                    break;
+            }
+            render();
+            processQueue();
+        };
+
+        // --- Simulation ---
+        const simulateProcess = async (task) => {
+            task.message = '上传中...';
+            await simulateStep(task, 1500);
+            if (task.status === 'cancelled') return;
+
+            task.message = '解析中...';
+            await simulateStep(task, 2000 + Math.random() * 4000);
+            if (task.status === 'cancelled') return;
+
+            const isSuccess = Math.random() > 0.2;
+            if (isSuccess) {
+                task.status = 'success';
+                task.message = '成功';
+            } else {
+                task.status = 'failed';
+                task.message = '解析失败';
+            }
+            render();
+        };
+
+        const simulateStep = (task, duration) => {
+             return new Promise(resolve => setTimeout(resolve, duration));
+        };
+
+        // --- Rendering ---
+        const render = () => {
+            DOM.taskList.innerHTML = tasks.map(getTaskHtml).join('');
+            updateUploadAbility();
+        };
+        
+        const updateUploadAbility = () => {
+            const canUpload = activeUploads < MAX_CONCURRENT_UPLOADS;
+            DOM.uploadBtn.disabled = !canUpload;
+            DOM.concurrencyWarning.style.display = canUpload ? 'none' : 'block';
+        };
+
+        const getTaskHtml = (task) => {
+            let statusClass, actionsHtml, outputHtml = '—';
+            const modelName = task.file.name.replace(/\.(zip|tar\.gz)$/i, '');
+
+            switch (task.status) {
+                case 'success':
+                    statusClass = 'status-success';
+                    outputHtml = `<a href="#" class="action-link" onclick="alert('跳转到模型: ${modelName} (路径: ${task.savePath.library}/${task.savePath.folder})'); event.preventDefault();">${modelName}</a>`;
+                    actionsHtml = `<a href="#" class="action-link danger" data-action="remove" data-id="${task.id}">移除</a>`;
+                    break;
+                case 'failed':
+                    statusClass = 'status-failed';
+                    actionsHtml = `
+                        <a href="#" class="action-link" data-action="retry" data-id="${task.id}">重试</a>
+                        <a href="#" class="action-link danger" data-action="remove" data-id="${task.id}">移除</a>`;
+                    break;
+                case 'processing':
+                    statusClass = 'status-processing';
+                    actionsHtml = `<a href="#" class="action-link danger" data-action="cancel" data-id="${task.id}">取消</a>`;
+                    break;
+                default: // queued
+                    statusClass = 'status-queued';
+                    actionsHtml = `<a href="#" class="action-link danger" data-action="remove" data-id="${task.id}">移除</a>`;
+            }
+
+            return `
+                <tr id="${task.id}">
+                    <td class="col-filename">${task.file.name}</td>
+                    <td>${outputHtml}</td>
+                    <td><span class="status-badge ${statusClass}">${task.message}</span></td>
+                    <td>${actionsHtml}</td>
+                </tr>
+            `;
+        };
+
+        return { init };
+    })();
+
+    document.addEventListener('DOMContentLoaded', URDFImporter.init);
+    </script>
+</body>
+</html>

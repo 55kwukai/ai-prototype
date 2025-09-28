@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>宏定义 (最终优化版) - 可交互原型</title>
+    <style>
+        :root {
+            --primary-color: #007bff; --primary-hover: #0056b3; --secondary-color: #6c757d;
+            --success-color: #28a745; --danger-color: #dc3545; --warning-color: #ffc107;
+            --light-gray: #f8f9fa; --medium-gray: #e9ecef; --dark-gray: #343a40;
+            --font-color: #212529; --border-color: #dee2e6; --background-color: #fff;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --border-radius: 0.3rem; --box-shadow: 0 4px 12px rgba(0,0,0,.1);
+        }
+        *, *::before, *::after { box-sizing: border-box; }
+        body { margin: 0; font-family: var(--font-family); background-color: var(--light-gray); color: var(--font-color); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        .app-header { background-color: var(--background-color); padding: 0 24px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; height: 60px; flex-shrink: 0; }
+        .app-header h1 { font-size: 1.5rem; margin: 0; font-weight: 500; }
+        .main-container { display: flex; flex-grow: 1; overflow: hidden; }
+        .sidebar { width: 280px; background-color: var(--background-color); border-right: 1px solid var(--border-color); padding: 16px; display: flex; flex-direction: column; flex-shrink: 0; }
+        .content-area { flex-grow: 1; padding: 24px; overflow-y: auto; display: flex; flex-direction: column; }
+        .button { display: inline-flex; align-items: center; justify-content: center; padding: 0.5rem 1rem; font-size: 1rem; font-weight: 400; border-radius: var(--border-radius); border: 1px solid transparent; cursor: pointer; transition: all 0.2s ease-in-out; text-decoration: none; white-space: nowrap; }
+        .button-primary { background-color: var(--primary-color); color: white; border-color: var(--primary-color); }
+        .button-primary:hover { background-color: var(--primary-hover); }
+        .button-primary:disabled { background-color: #a0c7ff; border-color: #a0c7ff; cursor: not-allowed; }
+        .button-secondary { background-color: var(--background-color); color: var(--font-color); border-color: var(--border-color); }
+        .button-secondary:hover { background-color: var(--light-gray); }
+        .input, .select, .textarea { width: 100%; padding: 0.5rem 0.75rem; font-size: 1rem; border: 1px solid var(--border-color); border-radius: var(--border-radius); background-color: var(--background-color); }
+        .input:focus, .select:focus, .textarea:focus { outline: none; border-color: var(--primary-color); box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25); }
+        .sidebar-header { margin-bottom: 16px; }
+        .sidebar-title { font-size: 1.1rem; font-weight: 600; margin: 0 0 8px 0; }
+        .namespace-list { list-style: none; padding: 0; margin: 16px 0; overflow-y: auto; flex-grow: 1; }
+        .namespace-item { padding: 10px 12px; border-radius: var(--border-radius); cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+        .namespace-item:hover { background-color: var(--light-gray); }
+        .namespace-item.active { background-color: rgba(0, 123, 255, 0.1); color: var(--primary-color); font-weight: 600; }
+        .namespace-info { display: flex; align-items: center; gap: 8px; flex-grow: 1; min-width: 0; }
+        .namespace-info span { text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+        .namespace-meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .status-dot.modified { background-color: var(--warning-color); }
+        .content-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+        .breadcrumb { color: var(--secondary-color); font-size: 1.2rem; }
+        .breadcrumb strong { color: var(--dark-gray); }
+        .table-wrapper { background-color: var(--background-color); border: 1px solid var(--border-color); border-radius: var(--border-radius); box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,.075); flex-grow: 1; }
+        .styled-table { width: 100%; border-collapse: collapse; }
+        .styled-table thead tr { border-bottom: 2px solid var(--border-color); }
+        .styled-table th { padding: 12px 16px; text-align: left; font-weight: 600; color: var(--secondary-color); background-color: var(--light-gray); }
+        .styled-table tbody tr { border-bottom: 1px solid var(--border-color); }
+        .styled-table tbody tr:last-child { border-bottom: none; }
+        .styled-table tbody tr:hover { background-color: #f5f5f5; }
+        .styled-table td { padding: 12px 16px; vertical-align: middle; }
+        .styled-table td.actions-cell { text-align: right; display: flex; justify-content: flex-end; align-items: center; gap: 4px; }
+        .action-button { background: none; border: none; cursor: pointer; padding: 4px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
+        .action-button:hover { background-color: var(--medium-gray); }
+        .action-button svg { width: 16px; height: 16px; fill: var(--secondary-color); }
+        .tag { padding: 0.2em 0.6em; border-radius: 10rem; font-size: 0.8em; font-weight: 600; color: white; }
+        .tag-version { background-color: var(--secondary-color); }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); display: none; justify-content: center; align-items: center; z-index: 1000; }
+        .modal-overlay.visible { display: flex; }
+        .modal { background-color: var(--background-color); border-radius: var(--border-radius); box-shadow: var(--box-shadow); width: 90%; max-width: 600px; display: flex; flex-direction: column; max-height: 90vh; }
+        .modal-header { padding: 16px 24px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+        .modal-title { font-size: 1.25rem; font-weight: 500; margin: 0; }
+        .modal-close { background: none; border: none; font-size: 1.5rem; cursor: pointer; padding: 0; line-height: 1; }
+        .modal-body { padding: 24px; overflow-y: auto; }
+        .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 8px; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+        .code-editor { font-family: 'Courier New', Courier, monospace; background-color: #2b2b2b; color: #a9b7c6; padding: 1rem; border-radius: var(--border-radius); min-height: 150px; white-space: pre-wrap; border: 1px solid #444; }
+        #toast-container { position: fixed; top: 20px; right: 20px; z-index: 2000; display: flex; flex-direction: column; gap: 10px; }
+        .toast { background-color: var(--dark-gray); color: white; padding: 12px 20px; border-radius: var(--border-radius); box-shadow: var(--box-shadow); opacity: 0; transform: translateX(100%); transition: all 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55); }
+        .toast.show { opacity: 1; transform: translateX(0); }
+        .parameters-container { border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 12px; }
+        .parameter-item { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+        .parameter-item input { font-size: 0.9rem; }
+        .parameter-item .param-name { flex: 0 0 150px; }
+        .parameter-item .param-desc { flex-grow: 1; }
+        .parameter-item .param-remove { background: none; border: none; color: var(--danger-color); cursor: pointer; font-size: 1.2rem; }
+        .diff-container { background-color: var(--light-gray); border: 1px solid var(--border-color); border-radius: var(--border-radius); max-height: 200px; overflow-y: auto; padding: 8px; font-family: monospace; font-size: 0.9em; }
+        .diff-item { padding: 4px 8px; border-radius: 3px; margin-bottom: 4px; }
+        .diff-item.added { background-color: #e6ffed; border-left: 3px solid #52c41a; }
+        .diff-item.removed { background-color: #ffeef0; border-left: 3px solid #f5222d; }
+        .diff-item.modified { background-color: #fff8e1; border-left: 3px solid #faad14; }
+        .diff-item strong { margin-right: 8px; }
+        .dropdown { position: relative; }
+        .dropdown-menu { position: absolute; top: 100%; right: 0; background-color: white; border-radius: var(--border-radius); box-shadow: var(--box-shadow); border: 1px solid var(--border-color); list-style: none; padding: 8px 0; margin: 4px 0 0; min-width: 140px; z-index: 10; display: none; }
+        .dropdown-menu.show { display: block; }
+        .dropdown-item { padding: 8px 16px; color: var(--font-color); cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 0.9rem; }
+        .dropdown-item:hover { background-color: var(--light-gray); }
+        .dropdown-item svg { width: 14px; height: 14px; fill: var(--secondary-color); }
+    </style>
+</head>
+<body>
+    <header class="app-header"><h1>宏定义</h1></header>
+    <div class="main-container">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2 class="sidebar-title">命名空间</h2>
+                <button class="button button-primary" style="width:100%" onclick="App.openNewNamespaceModal()">新建命名空间</button>
+            </div>
+            <ul class="namespace-list" id="namespace-list"></ul>
+        </aside>
+        <section class="content-area">
+            <div class="content-header">
+                <div class="breadcrumb" id="breadcrumb"></div>
+                <div id="content-actions" style="display: flex; gap: 10px;">
+                    <button id="publish-btn" class="button button-primary" style="display:none; background-color: var(--success-color);" onclick="App.openPublishModal()">发布新版本</button>
+                    <button class="button button-primary" onclick="App.openNewMacroModal()">新建宏</button>
+                </div>
+            </div>
+            <div class="table-wrapper">
+                <table class="styled-table">
+                    <thead><tr><th>宏名称</th><th>描述</th><th>引用模型数</th><th>最后修改</th><th style="width:150px; text-align: right;">操作</th></tr></thead>
+                    <tbody id="macro-list"></tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <!-- Modals -->
+    <div id="modal-container">
+        <!-- Namespace New/Edit Modal -->
+        <div id="namespace-modal" class="modal-overlay"><div class="modal"><div class="modal-header"><h3 class="modal-title" id="namespace-modal-title"></h3><button class="modal-close" onclick="App.closeModal('namespace-modal')">&times;</button></div><div class="modal-body"><input type="hidden" id="namespace-id-input"><div class="form-group"><label for="namespace-name-input">命名空间名称</label><input type="text" id="namespace-name-input" class="input" placeholder="例如: common_utils"></div></div><div class="modal-footer"><button class="button button-secondary" onclick="App.closeModal('namespace-modal')">取消</button><button class="button button-primary" onclick="App.saveNamespace()">保存</button></div></div></div>
+
+        <!-- Macro Modal -->
+        <div id="macro-modal" class="modal-overlay"><div class="modal" style="max-width: 800px;"><div class="modal-header"><h3 id="macro-modal-title" class="modal-title">新建宏</h3><button class="modal-close" onclick="App.closeModal('macro-modal')">&times;</button></div><div class="modal-body"><input type="hidden" id="macro-id-input"><div class="form-group"><label for="macro-name-input">宏名称</label><input type="text" id="macro-name-input" class="input" placeholder="例如: CALC_DIAMETER"></div><div class="form-group"><label for="macro-namespace-select">命名空间</label><select id="macro-namespace-select" class="select"></select></div><div class="form-group"><label>描述</label><textarea id="macro-description-textarea" class="textarea" rows="2" placeholder="简要描述宏的用途"></textarea></div><div class="form-group"><label>宏参数</label><div class="parameters-container"><div id="macro-parameters-list"></div><button class="button button-secondary" style="font-size:0.9rem; padding: 4px 10px; margin-top: 8px;" onclick="App.addParameterRow()">+ 添加参数</button></div></div><div class="form-group"><label>宏内容 (表达式)</label><textarea id="macro-content-textarea" class="textarea code-editor" rows="6" placeholder="例如: radius * 2"></textarea></div></div><div class="modal-footer"><button class="button button-secondary" onclick="App.closeModal('macro-modal')">取消</button><button class="button button-primary" onclick="App.saveMacro()">保存</button></div></div></div>
+        
+        <!-- Publish Modal -->
+        <div id="publish-modal" class="modal-overlay"><div class="modal" style="max-width: 700px;"><div class="modal-header"><h3 class="modal-title" id="publish-modal-title"></h3><button class="modal-close" onclick="App.closeModal('publish-modal')">&times;</button></div><div class="modal-body"><p>您将发布 <strong id="publish-version-text"></strong>。请填写版本说明。</p><div class="form-group"><label for="publish-description">版本说明 (Changelog)</label><textarea id="publish-description" class="textarea" rows="3" placeholder="必填，例如: 修复了 PI_CONSTANT 精度问题"></textarea></div><div class="form-group"><label>变更内容预览</label><div id="diff-container" class="diff-container"></div></div></div><div class="modal-footer"><button class="button button-secondary" onclick="App.closeModal('publish-modal')">取消</button><button id="publish-confirm-btn" class="button button-primary" onclick="App.confirmPublish()">发布</button></div></div></div>
+        
+        <!-- View Models Modal -->
+        <div id="view-models-modal" class="modal-overlay"><div class="modal"><div class="modal-header"><h3 class="modal-title" id="view-models-title"></h3><button class="modal-close" onclick="App.closeModal('view-models-modal')">&times;</button></div><div class="modal-body"><table class="styled-table"><thead><tr><th>模型名称</th><th>引用的命名空间版本</th></tr></thead><tbody id="view-models-list-body"></tbody></table></div><div class="modal-footer"><button class="button button-primary" onclick="App.closeModal('view-models-modal')">关闭</button></div></div></div>
+        
+        <!-- Namespace Update Modal -->
+        <div id="update-ns-modal" class="modal-overlay"><div class="modal"><div class="modal-header"><h3 class="modal-title" id="update-ns-title"></h3><button class="modal-close" onclick="App.closeModal('update-ns-modal')">&times;</button></div><div class="modal-body"><p id="update-ns-description"></p><div class="form-group"><label>将受影响的模型：</label><div id="update-ns-models-container" class="diff-container"></div></div></div><div class="modal-footer"><button class="button button-secondary" onclick="App.closeModal('update-ns-modal')">取消</button><button class="button button-primary" onclick="App.confirmNamespaceUpdate()">确认更新</button></div></div></div>
+
+    </div>
+    <div id="toast-container"></div>
+
+    <script>
+    const App = (() => {
+        let db = {
+            namespaces: [
+                { id: 1, name: 'default', versions: [{version: 1, description: 'Initial release', author: 'Admin', timestamp: '2023-10-20'}] },
+                { id: 2, name: 'materials_props', versions: [{version: 1, description: 'First version', author: 'Admin', timestamp: '2023-09-15'}] },
+                { id: 3, name: 'geometry_utils', versions: [{version: 1, description: 'Initial commit', author: 'Admin', timestamp: '2023-10-25'}, {version: 2, description: 'Added hypotenuse macro', author: 'John Doe', timestamp: '2023-10-28'}] }
+            ],
+            macros: [
+                { id: 101, namespaceId: 1, name: 'PI_CONSTANT', description: '高精度圆周率常量', parameters: [], content: '3.1415926535', lastModified: '2023-10-26' },
+                { id: 102, namespaceId: 3, name: 'CALC_AREA', description: '根据半径计算圆面积', parameters: [{name: 'radius', description: '圆的半径'}], content: 'PI_CONSTANT * radius^2', lastModified: '2023-10-27' },
+                { id: 103, namespaceId: 2, name: 'STEEL_DENSITY', description: '标准钢材密度 (kg/m^3)', parameters: [], content: '7850', lastModified: '2023-09-01' },
+                { id: 104, namespaceId: 3, name: 'GET_HYPOTENUSE', description: '计算直角三角形斜边', parameters: [{name:'a', description:'直角边a'}, {name:'b', description:'直角边b'}], content: 'sqrt(a^2 + b^2)', lastModified: '2023-10-28' },
+            ],
+            models: [
+                { id: 1, name: '单门右转角底柜', refs: [{nsId: 1, version: 1}] },
+                { id: 2, name: 'U型淋浴房', refs: [{nsId: 1, version: 1}] },
+                { id: 3, name: 'Piston_Head.prt', refs: [{nsId: 3, version: 2}] },
+                { id: 4, name: 'Bracket.prt', refs: [{nsId: 3, version: 2}] },
+                { id: 5, name: 'Frame.asm', refs: [{nsId: 3, version: 2}] },
+                { id: 6, name: 'Old_Bracket.prt', refs: [{nsId: 3, version: 1}] },
+            ]
+        };
+        let dbSnapshot = {};
+        let state = { currentNamespaceId: 1, nextNamespaceId: 4, nextMacroId: 105, namespaceToUpdate: null };
+
+        const getLatestVersion = (ns) => ns.versions[ns.versions.length - 1];
+        const hasUnpublishedChanges = (nsId) => JSON.stringify(dbSnapshot[nsId] || []) !== JSON.stringify(db.macros.filter(m => m.namespaceId === nsId));
+        
+        const modelsNeedUpdate = (nsId) => {
+            const latestVersion = getLatestVersion(db.namespaces.find(n => n.id === nsId)).version;
+            return db.models.some(model => model.refs.some(ref => ref.nsId === nsId && ref.version < latestVersion));
+        };
+        
+        const renderNamespaces = () => {
+            const list = document.getElementById('namespace-list');
+            list.innerHTML = '';
+            db.namespaces.forEach(ns => {
+                const latestVersion = getLatestVersion(ns);
+                const li = document.createElement('li');
+                li.className = `namespace-item ${ns.id === state.currentNamespaceId ? 'active' : ''}`;
+                const actions = `
+                    <a class="dropdown-item" onclick="App.openEditNamespaceModal(${ns.id})">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M362.7 19.3L314.3 67.7 444.3 197.7l48.4-48.4c25-25 25-65.5 0-90.5L453.3 19.3c-25-25-65.5-25-90.5 0zm-71 71L58.6 323.5c-10.4 10.4-18 23.3-22.2 37.4L1 481.2C-1.5 489.7 .8 498.8 7 505s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L421.7 220.3 291.7 90.3z"/></svg>
+                        编辑名称
+                    </a>
+                    <a class="dropdown-item" onclick="App.deleteNamespace(${ns.id}, '${ns.name}')">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path fill="currentColor" d="M135.2 17.7L128 32H32C14.3 32 0 46.3 0 64S14.3 96 32 96H416c17.7 0 32-14.3 32-32s-14.3-32-32-32H320l-7.2-14.3C307.4 6.8 296.3 0 284.2 0H163.8c-12.1 0-23.2 6.8-28.6 17.7zM416 128H32L53.2 467c1.6 25.3 22.6 45 47.9 45H346.9c25.3 0 46.3-19.7 47.9-45L416 128z"/></svg>
+                        删除
+                    </a>`;
+
+                li.innerHTML = `
+                    <div class="namespace-info" onclick="App.selectNamespace(${ns.id})">
+                        ${hasUnpublishedChanges(ns.id) ? '<span class="status-dot modified"></span>' : ''}
+                        <span>${ns.name}</span>
+                    </div>
+                    <div class="namespace-meta">
+                        <span class="tag tag-version">V${latestVersion.version}</span>
+                        ${modelsNeedUpdate(ns.id) ? `<button class="action-button" onclick="event.stopPropagation(); App.openNamespaceUpdateModal(${ns.id})" title="更新模型引用至最新版本"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg></button>`: ''}
+                        <div class="dropdown">
+                             <button class="action-button" onclick="App.toggleDropdown(event, 'ns-${ns.id}')" title="更多操作">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 512" width="16" height="16"><path fill="currentColor" d="M64 360a56 56 0 1 0 0 112 56 56 0 1 0 0-112zm0-160a56 56 0 1 0 0 112 56 56 0 1 0 0-112zM120 56a56 56 0 1 0-112 0 56 56 0 1 0 112 0z"></path></svg>
+                            </button>
+                            <div class="dropdown-menu" id="ns-${ns.id}">${actions}</div>
+                        </div>
+                    </div>`;
+                list.appendChild(li);
+            });
+        };
+
+        const renderMacros = () => {
+            const ns = db.namespaces.find(n => n.id === state.currentNamespaceId);
+            const newMacroBtn = document.querySelector('button[onclick="App.openNewMacroModal()"]');
+            
+            if (!ns) {
+                document.getElementById('breadcrumb').innerHTML = '<strong>请选择或创建一个命名空间</strong>';
+                document.getElementById('macro-list').innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 40px;">没有可用的命名空间。</td></tr>';
+                if (newMacroBtn) newMacroBtn.style.display = 'none';
+                document.getElementById('publish-btn').style.display = 'none';
+                return;
+            }
+            if (newMacroBtn) newMacroBtn.style.display = 'inline-flex';
+
+            document.getElementById('breadcrumb').innerHTML = `<strong>${ns.name}</strong>`;
+            const list = document.getElementById('macro-list');
+            list.innerHTML = '';
+            const macrosInNamespace = db.macros.filter(m => m.namespaceId === state.currentNamespaceId);
+            if (macrosInNamespace.length === 0) { list.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 40px;">此命名空间下暂无宏定义</td></tr>'; return; }
+            macrosInNamespace.forEach(macro => {
+                const references = db.models.filter(model => model.refs.some(ref => db.macros.find(m => m.id === macro.id)?.namespaceId === ref.nsId)).length;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${macro.name}</strong></td>
+                    <td>${macro.description}</td>
+                    <td>${references}</td>
+                    <td>${macro.lastModified}</td>
+                    <td class="actions-cell">
+                        <button class="action-button" title="查看引用" onclick="App.openViewModelsModal(${macro.id})">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><path fill="currentColor" d="M288 32c-17.7 0-32 14.3-32 32v112c0 17.7 14.3 32 32 32s32-14.3 32-32V64c17.7 0 32-14.3 32-32s-14.3-32-32-32H288zM128 64c0-17.7-14.3-32-32-32H32C14.3 0 0 14.3 0 32s14.3 32 32 32h64v32H32c-17.7 0-32 14.3-32 32s14.3 32 32 32h96c17.7 0 32-14.3 32-32V64zM448 160h64c17.7 0 32-14.3 32-32s-14.3-32-32-32h-64c-17.7 0-32 14.3-32 32s14.3 32 32 32zm0 64h96c17.7 0 32-14.3 32-32s-14.3-32-32-32h-96c-17.7 0-32 14.3-32 32s14.3 32 32 32zm-32 96c17.7 0 32-14.3 32-32s-14.3-32-32-32H256v-64c0-17.7-14.3-32-32-32s-32 14.3-32 32v64H32c-17.7 0-32 14.3-32 32s14.3 32 32 32h160v64c0 17.7 14.3 32 32 32s32-14.3 32-32v-64h160zM288 480c17.7 0 32-14.3 32-32V352c0-17.7-14.3-32-32-32s-32 14.3-32 32v96c-17.7 0-32 14.3-32 32s14.3 32 32 32h0z"/></svg>
+                        </button>
+                        <button class="action-button" title="编辑" onclick="App.openEditMacroModal(${macro.id})">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M362.7 19.3L314.3 67.7 444.3 197.7l48.4-48.4c25-25 25-65.5 0-90.5L453.3 19.3c-25-25-65.5-25-90.5 0zm-71 71L58.6 323.5c-10.4 10.4-18 23.3-22.2 37.4L1 481.2C-1.5 489.7 .8 498.8 7 505s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L421.7 220.3 291.7 90.3z"/></svg>
+                        </button>
+                        <button class="action-button" title="删除" onclick="App.deleteMacro(${macro.id}, '${macro.name}')">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path fill="currentColor" d="M135.2 17.7L128 32H32C14.3 32 0 46.3 0 64S14.3 96 32 96H416c17.7 0 32-14.3 32-32s-14.3-32-32-32H320l-7.2-14.3C307.4 6.8 296.3 0 284.2 0H163.8c-12.1 0-23.2 6.8-28.6 17.7zM416 128H32L53.2 467c1.6 25.3 22.6 45 47.9 45H346.9c25.3 0 46.3-19.7 47.9-45L416 128z"/></svg>
+                        </button>
+                    </td>`;
+                list.appendChild(tr);
+            });
+        };
+        
+        const renderContentHeader = () => { document.getElementById('publish-btn').style.display = hasUnpublishedChanges(state.currentNamespaceId) ? 'inline-flex' : 'none'; };
+        const renderAll = () => { renderNamespaces(); renderMacros(); renderContentHeader(); };
+        const openModal = (id) => document.getElementById(id).classList.add('visible');
+        const closeModal = (id) => { document.getElementById(id).classList.remove('visible'); };
+
+        const openNewNamespaceModal = () => {
+            document.getElementById('namespace-modal-title').innerText = '新建命名空间';
+            document.getElementById('namespace-id-input').value = '';
+            document.getElementById('namespace-name-input').value = '';
+            openModal('namespace-modal');
+        };
+
+        const openEditNamespaceModal = (nsId) => {
+            const ns = db.namespaces.find(n => n.id === nsId);
+            document.getElementById('namespace-modal-title').innerText = '编辑命名空间';
+            document.getElementById('namespace-id-input').value = ns.id;
+            document.getElementById('namespace-name-input').value = ns.name;
+            openModal('namespace-modal');
+        };
+
+        const saveNamespace = () => {
+            const id = document.getElementById('namespace-id-input').value;
+            const name = document.getElementById('namespace-name-input').value.trim();
+            if (!name) { alert('名称不能为空'); return; }
+            if (db.namespaces.some(ns => ns.name === name && ns.id != id)) { alert('命名空间名称已存在'); return; }
+            if (id) { db.namespaces.find(n => n.id == id).name = name; }
+            else { db.namespaces.push({ id: state.nextNamespaceId++, name: name, versions: [{version: 1, description: 'Initial release', author:'Admin', timestamp: new Date().toISOString().slice(0, 10)}] }); }
+            createSnapshot(); closeModal('namespace-modal'); renderAll();
+        };
+
+        const openNewMacroModal = (macro = null) => {
+            document.getElementById('macro-modal-title').innerText = macro ? `编辑宏: ${macro.name}` : '新建宏';
+            document.getElementById('macro-id-input').value = macro ? macro.id : '';
+            document.getElementById('macro-name-input').value = macro ? macro.name : '';
+            document.getElementById('macro-description-textarea').value = macro ? macro.description : '';
+            document.getElementById('macro-content-textarea').value = macro ? macro.content : '';
+            
+            // Populate namespace dropdown
+            const namespaceSelect = document.getElementById('macro-namespace-select');
+            namespaceSelect.innerHTML = '';
+            db.namespaces.forEach(ns => {
+                const option = document.createElement('option');
+                option.value = ns.id;
+                option.textContent = ns.name;
+                namespaceSelect.appendChild(option);
+            });
+            namespaceSelect.value = macro ? macro.namespaceId : state.currentNamespaceId;
+
+            document.getElementById('macro-parameters-list').innerHTML = '';
+            if (macro && macro.parameters) macro.parameters.forEach(p => addParameterRow(p));
+            openModal('macro-modal');
+        };
+        
+        const openEditMacroModal = (macroId) => openNewMacroModal(db.macros.find(m => m.id === macroId));
+
+        const saveMacro = () => {
+            const id = document.getElementById('macro-id-input').value;
+            const name = document.getElementById('macro-name-input').value.trim();
+            const namespaceId = parseInt(document.getElementById('macro-namespace-select').value, 10);
+            const description = document.getElementById('macro-description-textarea').value.trim();
+            const content = document.getElementById('macro-content-textarea').value.trim();
+            const parameters = Array.from(document.querySelectorAll('#macro-parameters-list .parameter-item')).map(item => ({ name: item.querySelector('.param-name').value.trim(), description: item.querySelector('.param-desc').value.trim() })).filter(p => p.name);
+            
+            if (!name || !content) { alert('宏名称和内容不能为空'); return; }
+            const now = new Date().toISOString().slice(0, 10);
+
+            if (id) {
+                const macro = db.macros.find(m => m.id === parseInt(id));
+                Object.assign(macro, { name, namespaceId, description, parameters, content, lastModified: now });
+            } else {
+                db.macros.push({ id: state.nextMacroId++, name, namespaceId, description, parameters, content, lastModified: now });
+            }
+            closeModal('macro-modal');
+            renderAll();
+        };
+
+        const deleteMacro = (macroId, macroName) => {
+            if (confirm(`确定要删除宏 "${macroName}" 吗？此操作会产生未发布的变更。`)) {
+                db.macros = db.macros.filter(m => m.id !== macroId);
+                renderAll();
+            }
+        };
+
+        const deleteNamespace = (namespaceId, namespaceName) => {
+            if (db.macros.some(m => m.namespaceId === namespaceId)) { alert(`无法删除 "${namespaceName}"，因为它不为空。`); return; }
+            if (confirm(`确定要永久删除命名空间 "${namespaceName}" 吗？此操作无法撤销。`)) {
+                const wasCurrent = state.currentNamespaceId === namespaceId;
+                db.namespaces = db.namespaces.filter(ns => ns.id !== namespaceId);
+                delete dbSnapshot[namespaceId];
+                if (wasCurrent) {
+                    state.currentNamespaceId = db.namespaces.length > 0 ? db.namespaces[0].id : null;
+                }
+                renderAll();
+            }
+        };
+
+        const addParameterRow = (param = {name: '', description: ''}) => {
+            const list = document.getElementById('macro-parameters-list');
+            const item = document.createElement('div');
+            item.className = 'parameter-item';
+            item.innerHTML = `<input type="text" class="input param-name" placeholder="paramName" value="${param.name}"><input type="text" class="input param-desc" placeholder="参数说明" value="${param.description}"><button type="button" class="param-remove" onclick="this.parentElement.remove()">&times;</button>`;
+            list.appendChild(item);
+        };
+        
+        const calculateDiff = (namespaceId) => {
+            const original = dbSnapshot[namespaceId] || []; const current = db.macros.filter(m => m.namespaceId === namespaceId);
+            const diff = { added: [], removed: [], modified: [] };
+            const originalMap = new Map(original.map(m => [m.id, m])); const currentMap = new Map(current.map(m => [m.id, m]));
+            for (const [id, macro] of currentMap.entries()) {
+                if (!originalMap.has(id)) diff.added.push(macro);
+                else if (JSON.stringify(originalMap.get(id)) !== JSON.stringify(macro)) diff.modified.push(macro);
+            }
+            for (const [id, macro] of originalMap.entries()) { if (!currentMap.has(id)) diff.removed.push(macro); }
+            return diff;
+        };
+
+        const openPublishModal = () => {
+            const ns = db.namespaces.find(n => n.id === state.currentNamespaceId);
+            const latestVersion = getLatestVersion(ns);
+            const newVersion = latestVersion.version + 1;
+            document.getElementById('publish-modal-title').innerText = `发布新版本: ${ns.name}`;
+            document.getElementById('publish-version-text').innerText = `V${newVersion}`;
+            document.getElementById('publish-description').value = '';
+
+            const diff = calculateDiff(ns.id);
+            const hasChanges = diff.added.length > 0 || diff.removed.length > 0 || diff.modified.length > 0;
+            document.getElementById('publish-confirm-btn').disabled = !hasChanges;
+            let diffHtml = '';
+            if (!hasChanges) { diffHtml = '<div class="diff-item">自上一版本无任何变更。</div>'; } 
+            else {
+                diff.added.forEach(m => diffHtml += `<div class="diff-item added">+ <strong>新增:</strong> ${m.name}</div>`);
+                diff.removed.forEach(m => diffHtml += `<div class="diff-item removed">- <strong>移除:</strong> ${m.name}</div>`);
+                diff.modified.forEach(m => diffHtml += `<div class="diff-item modified">~ <strong>修改:</strong> ${m.name}</div>`);
+            }
+            document.getElementById('diff-container').innerHTML = diffHtml;
+            openModal('publish-modal');
+        };
+        
+        const confirmPublish = () => {
+            const description = document.getElementById('publish-description').value.trim();
+            if (!description) { alert('版本说明不能为空'); return; }
+            const ns = db.namespaces.find(n => n.id === state.currentNamespaceId);
+            const newVersion = getLatestVersion(ns).version + 1;
+            ns.versions.push({ version: newVersion, description, author: 'Current User', timestamp: new Date().toISOString().slice(0, 10) });
+            createSnapshot();
+            closeModal('publish-modal');
+            renderAll();
+            showToast(`命名空间 ${ns.name} 已发布新版本 V${newVersion}`);
+        };
+        
+        const openViewModelsModal = (macroId) => {
+            const macro = db.macros.find(m => m.id === macroId);
+            document.getElementById('view-models-title').innerText = `引用 "${macro.name}" 的模型`;
+            const listBody = document.getElementById('view-models-list-body');
+            const modelsUsingMacro = db.models.filter(model => model.refs.some(ref => ref.nsId === macro.namespaceId));
+            if (modelsUsingMacro.length > 0) {
+                listBody.innerHTML = modelsUsingMacro.map(model => {
+                    const refVersion = model.refs.find(ref => ref.nsId === macro.namespaceId).version;
+                    return `<tr><td>${model.name}</td><td><span class="tag tag-version">V${refVersion}</span></td></tr>`;
+                }).join('');
+            } else { listBody.innerHTML = `<tr><td colspan="2" style="text-align:center; color:#999;">暂无模型引用此宏</td></tr>`; }
+            openModal('view-models-modal');
+        };
+
+        const openNamespaceUpdateModal = (nsId) => {
+            state.namespaceToUpdate = nsId;
+            const ns = db.namespaces.find(n => n.id === nsId);
+            const latestVersion = getLatestVersion(ns).version;
+            const modelsToUpdate = db.models.filter(model => model.refs.some(ref => ref.nsId === nsId && ref.version < latestVersion));
+            
+            document.getElementById('update-ns-title').innerText = `更新命名空间: ${ns.name}`;
+            document.getElementById('update-ns-description').innerHTML = `此操作会将 <strong>${modelsToUpdate.length}</strong> 个模型对 <strong>${ns.name}</strong> 的引用更新到最新版本 <strong>V${latestVersion}</strong>。`;
+            const container = document.getElementById('update-ns-models-container');
+            container.innerHTML = modelsToUpdate.map(model => {
+                const oldVersion = model.refs.find(ref => ref.nsId === nsId).version;
+                return `<div class="diff-item"><strong>${model.name}</strong> (V${oldVersion} → V${latestVersion})</div>`;
+            }).join('');
+            openModal('update-ns-modal');
+        };
+
+        const confirmNamespaceUpdate = () => {
+            const nsId = state.namespaceToUpdate;
+            const ns = db.namespaces.find(n => n.id === nsId);
+            const latestVersion = getLatestVersion(ns).version;
+            db.models.forEach(model => {
+                const ref = model.refs.find(r => r.nsId === nsId);
+                if (ref && ref.version < latestVersion) { ref.version = latestVersion; }
+            });
+            showToast(`${ns.name} 的模型引用已全部更新至 V${latestVersion}`);
+            closeModal('update-ns-modal');
+            renderAll();
+        };
+
+        const createSnapshot = () => {
+            dbSnapshot = {};
+            db.namespaces.forEach(ns => { dbSnapshot[ns.id] = JSON.parse(JSON.stringify(db.macros.filter(m => m.namespaceId === ns.id))); });
+        };
+
+        const showToast = (message) => {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'toast show';
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => { toast.classList.remove('show'); toast.addEventListener('transitionend', () => toast.remove()); }, 3000);
+        };
+        
+        const toggleDropdown = (event, menuId) => {
+            event.stopPropagation();
+            const wasOpen = document.getElementById(menuId)?.classList.contains('show');
+            closeAllDropdowns();
+            if (!wasOpen) document.getElementById(menuId)?.classList.add('show');
+        };
+
+        const closeAllDropdowns = () => document.querySelectorAll('.dropdown-menu.show').forEach(menu => menu.classList.remove('show'));
+        
+        const init = () => { 
+            createSnapshot(); 
+            renderAll();
+            document.addEventListener('click', closeAllDropdowns);
+        };
+
+        return { init, openNewNamespaceModal, openEditNamespaceModal, saveNamespace, deleteNamespace, selectNamespace: (id) => { state.currentNamespaceId = id; renderAll(); }, openNewMacroModal, openEditMacroModal, saveMacro, deleteMacro, closeModal, addParameterRow, openPublishModal, confirmPublish, openViewModelsModal, openNamespaceUpdateModal, confirmNamespaceUpdate, toggleDropdown };
+    })();
+
+    document.addEventListener('DOMContentLoaded', App.init);
+    </script>
+</body>
+</html>
