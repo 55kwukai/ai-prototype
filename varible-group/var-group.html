@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>商品预览插件 - 分组设计方案</title>
+    <style>
+        :root {
+            --primary-color: #1890ff;
+            --bg-color: #f0f2f5;
+            --border-color: #e8e8e8;
+            --text-main: #333;
+            --text-sub: #666;
+            --header-bg: #fafafa;
+            --group-bg: #f7f8fa; /* 分组背景色 */
+        }
+
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #eef0f3; display: flex; justify-content: center; padding: 20px; }
+
+        /* 模拟主窗口 */
+        .main-window {
+            width: 1000px;
+            background: #fff;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            height: 700px;
+        }
+
+        /* 顶部标题栏 */
+        .window-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--text-main);
+        }
+
+        /* 布局容器 */
+        .container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* 左侧商品列表 */
+        .sidebar {
+            width: 220px;
+            border-right: 1px solid var(--border-color);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar-header { display: flex; justify-content: space-between; margin-bottom: 15px; font-weight: bold; }
+        .product-item { padding: 10px 15px; cursor: pointer; color: var(--text-sub); border-radius: 4px; margin-bottom: 5px; }
+        .product-item:hover { background-color: #f5f5f5; }
+        .product-item.active { background-color: #e6f7ff; color: var(--primary-color); }
+
+        /* 右侧内容区 */
+        .content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #fff;
+        }
+
+        /* Tabs */
+        .tabs { display: flex; padding: 0 20px; margin-top: 15px; }
+        .tab-item {
+            padding: 8px 24px;
+            background: var(--primary-color);
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .tab-item.inactive { background: #f5f5f5; color: var(--text-sub); }
+
+        /* Toolbar */
+        .toolbar {
+            padding: 15px 20px;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 10px;
+        }
+        .count-info { color: #999; font-size: 13px; margin-right: auto; }
+        
+        /* 按钮样式 */
+        .btn {
+            padding: 6px 15px;
+            border-radius: 2px;
+            font-size: 13px;
+            cursor: pointer;
+            border: 1px solid var(--border-color);
+            background: #fff;
+            transition: all 0.3s;
+        }
+        .btn-primary { border-color: var(--primary-color); color: var(--primary-color); }
+        .btn-primary:hover { background-color: #e6f7ff; }
+        
+        /* 新增的分组按钮样式 */
+        .btn-group-add {
+            border-color: #722ed1;
+            color: #722ed1;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .btn-group-add:hover { background-color: #f9f0ff; }
+
+        /* 变量表格 */
+        .variable-table-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0 20px 20px 20px;
+        }
+        .v-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .v-table th {
+            background: var(--header-bg);
+            text-align: left;
+            padding: 12px 10px;
+            color: var(--text-sub);
+            font-weight: normal;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .v-table td {
+            padding: 12px 10px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-main);
+        }
+
+        /* --- 核心：分组样式设计 --- */
+        
+        /* 分组标题行 */
+        .group-row td {
+            background-color: var(--group-bg);
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--border-color);
+            font-weight: 600;
+            color: #333;
+        }
+        .group-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .group-left { display: flex; align-items: center; gap: 8px; }
+        .group-actions { opacity: 0; transition: opacity 0.2s; font-weight: normal; font-size: 12px; }
+        .group-row:hover .group-actions { opacity: 1; }
+        .group-actions span { cursor: pointer; margin-left: 10px; color: var(--primary-color); }
+        .group-actions span.delete { color: #ff4d4f; }
+        
+        /* 拖拽把手 */
+        .drag-handle { cursor: grab; color: #ccc; margin-right: 8px; font-size: 16px; }
+        
+        /* 单元格内容样式 */
+        .action-link { color: var(--primary-color); margin-right: 10px; cursor: pointer; text-decoration: none; }
+        .action-link.danger { color: #ff4d4f; }
+        .info-icon { color: #ccc; cursor: help; border: 1px solid #ccc; border-radius: 50%; width: 16px; height: 16px; display: inline-block; text-align: center; line-height: 14px; font-size: 12px; }
+        
+        /* 颜色块模拟 */
+        .color-box { width: 20px; height: 20px; background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPjxyZWN0IHdpZHRoPSI4IiBoZWlnaHQ9IjgiIGZpbGw9IiNjY2MiLz48L3N2Zz4='); display: inline-block; vertical-align: middle; border: 1px solid #eee; }
+
+        /* 底部保存栏 */
+        .footer {
+            padding: 15px 20px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+        }
+        .btn-save {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 8px 25px;
+            border-radius: 4px;
+        }
+
+        /* 提示：当拖拽时的视觉反馈（仅CSS模拟） */
+        tr.is-dragging { background: #e6f7ff; }
+    </style>
+</head>
+<body>
+
+<div class="main-window">
+    <!-- 顶部 -->
+    <div class="window-header">
+        <span>⋮ 商品预览插件</span>
+        <span style="font-size: 18px; color: #999;">⛶</span>
+    </div>
+
+    <div class="container">
+        <!-- 左侧列表 -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <span>商品列表</span>
+                <span style="cursor:pointer">+</span>
+            </div>
+            <div class="product-item">四门地柜</div>
+            <div class="product-item">初始双列地柜</div>
+            <div class="product-item">免拉四门地柜</div>
+            <div class="product-item active">三门一左二右地柜</div>
+            <div class="product-item">三门二左一右地柜</div>
+        </div>
+
+        <!-- 右侧区域 -->
+        <div class="content">
+            <div class="tabs">
+                <div class="tab-item">变量</div>
+                <div class="tab-item inactive">附加配置</div>
+            </div>
+
+            <!-- 工具栏 -->
+            <div class="toolbar">
+                <span class="count-info">已添加 19 个 ↑</span>
+                
+                <!-- 新增功能按钮 -->
+                <button class="btn btn-group-add">
+                    <span>📂</span> 新建分组
+                </button>
+                
+                <button class="btn btn-primary">添加变量 ▼</button>
+                <button class="btn">清空列表</button>
+            </div>
+
+            <!-- 列表主体 -->
+            <div class="variable-table-container">
+                <table class="v-table">
+                    <thead>
+                        <tr>
+                            <th width="40"></th>
+                            <th width="120">名称</th>
+                            <th width="80">引用名</th>
+                            <th width="80">参数类型</th>
+                            <th width="80">值类型</th>
+                            <th width="100">当前值</th>
+                            <th width="80">其他参数</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        
+                        <!-- 分组 1：尺寸参数 -->
+                        <tr class="group-row">
+                            <td colspan="8">
+                                <div class="group-container">
+                                    <div class="group-left">
+                                        <span style="cursor: pointer;">▼</span> <!-- 展开收起图标 -->
+                                        <span>📐 尺寸参数</span>
+                                    </div>
+                                    <div class="group-actions">
+                                        <span>编辑组名</span>
+                                        <span class="delete">删除分组</span>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <!-- 组内变量 -->
+                        <tr>
+                            <td><span class="drag-handle">⋮⋮</span></td>
+                            <td>柜宽</td>
+                            <td>W</td>
+                            <td>浮点数</td>
+                            <td>区间</td>
+                            <td>1200</td>
+                            <td><span class="info-icon">i</span></td>
+                            <td>
+                                <a class="action-link">编辑</a>
+                                <a class="action-link danger">删除</a>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><span class="drag-handle">⋮⋮</span></td>
+                            <td>柜深</td>
+                            <td>D</td>
+                            <td>浮点数</td>
+                            <td>区间</td>
+                            <td>550</td>
+                            <td><span class="info-icon">i</span></td>
+                            <td>
+                                <a class="action-link">编辑</a>
+                                <a class="action-link danger">删除</a>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><span class="drag-handle">⋮⋮</span></td>
+                            <td>柜高</td>
+                            <td>H</td>
+                            <td>浮点数</td>
+                            <td>区间</td>
+                            <td>730</td>
+                            <td><span class="info-icon">i</span></td>
+                            <td>
+                                <a class="action-link">编辑</a>
+                                <a class="action-link danger">删除</a>
+                            </td>
+                        </tr>
+
+                        <!-- 分组 2：材质外观 -->
+                        <tr class="group-row">
+                            <td colspan="8">
+                                <div class="group-container">
+                                    <div class="group-left">
+                                        <span style="cursor: pointer;">▼</span>
+                                        <span>🎨 材质与外观</span>
+                                    </div>
+                                    <div class="group-actions">
+                                        <span>编辑组名</span>
+                                        <span class="delete">删除分组</span>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><span class="drag-handle">⋮⋮</span></td>
+                            <td>柜体板厚</td>
+                            <td>ST</td>
+                            <td>浮点数</td>
+                            <td>区间</td>
+                            <td>18</td>
+                            <td><span class="info-icon">i</span></td>
+                            <td>
+                                <a class="action-link">编辑</a>
+                                <a class="action-link danger">删除</a>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><span class="drag-handle">⋮⋮</span></td>
+                            <td>柜体花色</td>
+                            <td>CZ</td>
+                            <td>材质</td>
+                            <td>无限制</td>
+                            <td><span class="color-box"></span></td>
+                            <td><span class="info-icon">i</span></td>
+                            <td>
+                                <a class="action-link">编辑</a>
+                                <a class="action-link danger">删除</a>
+                            </td>
+                        </tr>
+                         <tr>
+                            <td><span class="drag-handle">⋮⋮</span></td>
+                            <td>背板样式</td>
+                            <td>BBYS</td>
+                            <td>样式</td>
+                            <td>无限制</td>
+                            <td><span class="color-box" style="background: #f0f0f0;"></span></td>
+                            <td><span class="info-icon">i</span></td>
+                            <td>
+                                <a class="action-link">编辑</a>
+                                <a class="action-link danger">删除</a>
+                            </td>
+                        </tr>
+
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <button class="btn-save">保存</button>
+    </div>
+</div>
+
+</body>
+</html>
